@@ -75,6 +75,10 @@ export default function DeviceViewer() {
     // Connect to standard Socket.IO server
     const socket = io({
       transports: ["websocket"],
+      reconnectionAttempts: 15,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
     });
     socketRef.current = socket;
 

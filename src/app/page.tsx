@@ -112,6 +112,30 @@ const DEFAULT_BENCHMARKS: BenchmarkProfile[] = [
       freq: 0.0,
     },
   },
+  {
+    name: "waving",
+    isSystem: true,
+    features: {
+      meanAcc: 10.4,
+      varAcc: 2.2,
+      maxAcc: 13.0,
+      meanRot: 4.8,
+      varRot: 3.2,
+      freq: 3.2,
+    },
+  },
+  {
+    name: "punching",
+    isSystem: true,
+    features: {
+      meanAcc: 12.8,
+      varAcc: 8.5,
+      maxAcc: 22.0,
+      meanRot: 5.5,
+      varRot: 5.0,
+      freq: 0.8,
+    },
+  },
 ];
 
 export default function Home() {
@@ -195,6 +219,10 @@ export default function Home() {
 
     const socket = io({
       transports: ["websocket"],
+      reconnectionAttempts: 15,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
     });
     socketRef.current = socket;
 
@@ -523,6 +551,26 @@ export default function Home() {
       if (attachment === "torso") {
         lArm = 10;
         rArm = 10;
+      }
+    } else if (activity === "waving") {
+      // Wave cycle
+      const cycle = Date.now() / 80;
+      const waveAngle = Math.sin(cycle) * 55 - 90;
+      if (attachment === "left_arm") {
+        lArm = waveAngle;
+      } else if (attachment === "right_arm") {
+        rArm = -waveAngle;
+      } else {
+        rArm = -waveAngle; // default wave right arm
+      }
+    } else if (activity === "punching") {
+      // Quick punch extension
+      if (attachment === "left_arm") {
+        lArm = -90;
+      } else if (attachment === "right_arm") {
+        rArm = 90;
+      } else {
+        rArm = 90;
       }
     }
 
