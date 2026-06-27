@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { io, Socket } from "socket.io-client";
 import { v4 as uuidv4 } from "uuid";
 import dynamic from "next/dynamic";
 
@@ -140,11 +139,8 @@ const DEFAULT_BENCHMARKS: BenchmarkProfile[] = [
 
 export default function Home() {
   const [deviceId, setDeviceId] = useState<string>("");
-  const [connectionStatus, setConnectionStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
-  const [isStreaming, setIsStreaming] = useState<boolean>(true);
   const [fps, setFps] = useState<number>(0);
-  const [latency, setLatency] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [attachmentPoint, setAttachmentPoint] = useState<"torso" | "left_arm" | "right_arm">("torso");
   const [invertRotation, setInvertRotation] = useState<boolean>(false);
@@ -181,7 +177,6 @@ export default function Home() {
     rightLeg: 0,
   });
 
-  const socketRef = useRef<Socket | null>(null);
   const frameCountRef = useRef<number>(0);
   const lastFpsUpdateRef = useRef<number>(0);
 
@@ -213,93 +208,10 @@ export default function Home() {
     }
   }, []);
 
-  // Socket connection and streaming loop
-  useEffect(() => {
-    if (!deviceId) return;
-
-    const socket = io(typeof window !== "undefined" ? window.location.origin : "", {
-      path: "/socket.io",
-      transports: ["websocket"],
-      reconnectionAttempts: 15,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 10000,
-    });
-    socketRef.current = socket;
-
-    socket.on("connect", () => {
-      setConnectionStatus("connected");
-      socket.emit("register_device", deviceId);
-    });
-
-    socket.on("disconnect", () => {
-      setConnectionStatus("disconnected");
-    });
-
-    socket.on("connect_error", () => {
-      setConnectionStatus("disconnected");
-    });
-
-    // Handle latency pong from server
-    socket.on("pong_latency", (clientTime: number) => {
-      setLatency(Date.now() - clientTime);
-    });
-
-    // Latency check interval
-    const latencyInterval = setInterval(() => {
-      if (socket.connected) {
-        socket.emit("ping_latency", Date.now());
-      }
-    }, 2000);
-
-    lastFpsUpdateRef.current = performance.now();
-
-    // Stream sensor, activity and pose state at 40 FPS (25ms)
-    const streamInterval = setInterval(() => {
-      if (socket.connected && isStreaming) {
-        const payload = {
-          sensorData: {
-            accelerometer: {
-              x: historyRef.current.length > 0 ? accelerometer.x : null,
-              y: historyRef.current.length > 0 ? accelerometer.y : null,
-              z: historyRef.current.length > 0 ? accelerometer.z : null,
-            },
-            gyroscope: {
-              alpha: historyRef.current.length > 0 ? gyroscope.alpha : null,
-              beta: historyRef.current.length > 0 ? gyroscope.beta : null,
-              gamma: historyRef.current.length > 0 ? gyroscope.gamma : null,
-            },
-            orientation: orientation,
-          },
-          detectedActivity: {
-            activity: detectedActivity.activity,
-            confidence: detectedActivity.confidence,
-          },
-          pose: pose,
-        };
-
-        socket.emit("sensor_data", payload);
-        frameCountRef.current += 1;
-
-        const now = performance.now();
-        const delta = now - lastFpsUpdateRef.current;
-        if (delta >= 1000) {
-          setFps(Math.round((frameCountRef.current * 1000) / delta));
-          frameCountRef.current = 0;
-          lastFpsUpdateRef.current = now;
-        }
-      }
-    }, 25);
-
-    return () => {
-      clearInterval(latencyInterval);
-      clearInterval(streamInterval);
-      socket.disconnect();
-    };
-  }, [deviceId, isStreaming, accelerometer, gyroscope, orientation, detectedActivity, pose]);
-
   // Request browser sensors permission
   useEffect(() => {
+    lastFpsUpdateRef.current = performance.now();
+
     if (typeof window !== "undefined") {
       const hasSensorSupport = "DeviceOrientationEvent" in window || "DeviceMotionEvent" in window;
       if (!hasSensorSupport) {
@@ -379,6 +291,16 @@ export default function Home() {
 
   // Feature extraction and classification engine
   function processSensorWindow() {
+    // Calculate local telemetry rate (FPS)
+    frameCountRef.current += 1;
+    const now = performance.now();
+    const delta = now - lastFpsUpdateRef.current;
+    if (delta >= 1000) {
+      setFps(Math.round((frameCountRef.current * 1000) / delta));
+      frameCountRef.current = 0;
+      lastFpsUpdateRef.current = now;
+    }
+
     const acc = rawAcc.current;
     const gyro = rawGyro.current;
     const orient = rawOrient.current;
@@ -694,16 +616,8 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center space-x-3">
-            <span className="flex h-2 w-2 relative">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                connectionStatus === "connected" ? "bg-cyan-400" : "bg-rose-400"
-              }`}></span>
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                connectionStatus === "connected" ? "bg-cyan-500" : "bg-rose-500"
-              }`}></span>
-            </span>
-            <span className="text-xs font-mono font-medium capitalize text-slate-300">
-              {connectionStatus}
+            <span className="text-xs font-mono font-medium text-slate-400">
+              Local Client Mode
             </span>
           </div>
         </div>
@@ -737,10 +651,6 @@ export default function Home() {
                 <span className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-xs font-mono font-bold text-cyan-400">
                   {fps} FPS
                 </span>
-                <span className="text-xs font-mono text-slate-400 ml-1">Latency:</span>
-                <span className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-xs font-mono font-bold text-violet-400">
-                  {latency}ms
-                </span>
               </div>
             </div>
 
@@ -754,13 +664,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 border-t border-white/5 pt-4">
-              <div>
-                <span className="text-[9px] uppercase font-mono text-slate-400">Device ID</span>
-                <p className="font-mono text-xs font-semibold text-white truncate mt-0.5" title={deviceId}>
-                  {deviceId || "Loading..."}
-                </p>
-              </div>
+            <div className="grid grid-cols-3 gap-4 mt-6 border-t border-white/5 pt-4">
               <div>
                 <span className="text-[9px] uppercase font-mono text-slate-400">Magnitude</span>
                 <p className="font-mono text-xs font-semibold text-cyan-400 mt-0.5">
@@ -768,15 +672,15 @@ export default function Home() {
                 </p>
               </div>
               <div>
-                <span className="text-[9px] uppercase font-mono text-slate-400">Streaming</span>
-                <p className="font-mono text-xs font-semibold text-white mt-0.5">
-                  {isStreaming ? "Active" : "Paused"}
-                </p>
-              </div>
-              <div>
                 <span className="text-[9px] uppercase font-mono text-slate-400">Active Profiles</span>
                 <p className="font-mono text-xs font-semibold text-white mt-0.5">
                   {benchmarks.length} Trained
+                </p>
+              </div>
+              <div>
+                <span className="text-[9px] uppercase font-mono text-slate-400">Telemetry State</span>
+                <p className="font-mono text-xs font-semibold text-white mt-0.5">
+                  Local Execution
                 </p>
               </div>
             </div>
@@ -828,36 +732,16 @@ export default function Home() {
           </section>
 
           {/* Core Settings / Perms */}
-          <section className="bg-slate-900/40 border border-white/5 rounded-2xl p-6 flex flex-wrap items-center gap-3">
-            {permissionGranted === false && (
+          {permissionGranted === false && (
+            <section className="bg-slate-900/40 border border-white/5 rounded-2xl p-6 flex flex-wrap items-center gap-3">
               <button
                 onClick={requestSensorsPermission}
                 className="px-4 py-2 bg-gradient-to-r from-cyan-400 to-indigo-500 hover:from-cyan-300 hover:to-indigo-400 text-black font-semibold rounded-xl text-xs shadow-lg active:scale-95 transition"
               >
                 Allow Motion Permission
               </button>
-            )}
-
-            <button
-              onClick={() => setIsStreaming(!isStreaming)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold border transition ${
-                isStreaming 
-                  ? "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20" 
-                  : "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20"
-              }`}
-            >
-              {isStreaming ? "Stop Live Sync" : "Resume Live Sync"}
-            </button>
-
-            <a
-              href={`/device/${deviceId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-xs font-semibold transition active:scale-95 flex items-center space-x-1"
-            >
-              <span>Open Remote Viewer ↗</span>
-            </a>
-          </section>
+            </section>
+          )}
 
           {/* Benchmark Recorder (Future-ready engine training) */}
           <section className="bg-slate-900/40 border border-white/5 rounded-2xl p-6 flex flex-col space-y-4">
