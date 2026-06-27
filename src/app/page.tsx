@@ -122,6 +122,12 @@ export default function Home() {
   const [fps, setFps] = useState<number>(0);
   const [latency, setLatency] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [attachmentPoint, setAttachmentPoint] = useState<"torso" | "left_arm" | "right_arm">("torso");
+  
+  const attachmentPointRef = useRef<"torso" | "left_arm" | "right_arm">("torso");
+  useEffect(() => {
+    attachmentPointRef.current = attachmentPoint;
+  }, [attachmentPoint]);
 
   // Telemetry state for UI
   const [accelerometer, setAccelerometer] = useState<StrictSensorValue>({ x: 0, y: 0, z: 0 });
@@ -454,18 +460,36 @@ export default function Home() {
     // Basic joints
     let head = 0;
     let tilt = 0;
-    let lArm = 0;
-    let rArm = 0;
+    let lArm = 5;
+    let rArm = -5;
     let lLeg = 0;
     let rLeg = 0;
 
-    // Use device orientation gamma (roll) and beta (pitch) to drive basic body tilt and head look angle
-    if (orient.gamma !== null) {
-      tilt = -orient.gamma; // tilt left/right
-    }
-    if (orient.beta !== null) {
-      // Limit pitch to natural head tilt range
-      head = Math.max(-45, Math.min(45, orient.beta - 60));
+    const attachment = attachmentPointRef.current;
+
+    if (attachment === "torso") {
+      // Use device orientation gamma (roll) and beta (pitch) to drive basic body tilt and head look angle
+      if (orient.gamma !== null) {
+        tilt = -orient.gamma; // tilt left/right
+      }
+      if (orient.beta !== null) {
+        // Limit pitch to natural head tilt range
+        head = Math.max(-45, Math.min(45, orient.beta - 60));
+      }
+    } else if (attachment === "left_arm") {
+      tilt = 0;
+      head = 0;
+      if (orient.beta !== null) {
+        // Map pitch beta to left arm rotation
+        lArm = orient.beta - 90;
+      }
+    } else if (attachment === "right_arm") {
+      tilt = 0;
+      head = 0;
+      if (orient.beta !== null) {
+        // Map pitch beta to right arm rotation
+        rArm = 90 - orient.beta;
+      }
     }
 
     if (activity === "walking") {
@@ -473,24 +497,26 @@ export default function Home() {
       const cycle = Date.now() / 120;
       lLeg = Math.sin(cycle) * 35;
       rLeg = -Math.sin(cycle) * 35;
-      lArm = -Math.sin(cycle) * 20;
-      rArm = Math.sin(cycle) * 20;
+      if (attachment === "torso") {
+        lArm = -Math.sin(cycle) * 20;
+        rArm = Math.sin(cycle) * 20;
+      }
     } else if (activity === "hand_raise") {
       // Arms raised high
-      lArm = -140;
-      rArm = -140;
       lLeg = 0;
       rLeg = 0;
+      if (attachment === "torso") {
+        lArm = -140;
+        rArm = -140;
+      }
     } else if (activity === "sitting") {
       // Hip/knee bend
       lLeg = 45;
       rLeg = 45;
-      lArm = 10;
-      rArm = 10;
-    } else {
-      // Unknown or standing state
-      lArm = 5;
-      rArm = -5;
+      if (attachment === "torso") {
+        lArm = 10;
+        rArm = 10;
+      }
     }
 
     setPose({
@@ -704,6 +730,32 @@ export default function Home() {
                 {errorMsg}
               </div>
             )}
+          </section>
+
+          {/* Phone Attachment Setup */}
+          <section className="bg-slate-900/40 border border-white/5 rounded-2xl p-6 flex flex-col space-y-4">
+            <div>
+              <h3 className="font-bold text-sm text-white font-sans">Phone Attachment Point</h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Select where the phone is strapped to map the movements to the stickman accurately.
+              </p>
+            </div>
+            
+            <div className="flex gap-2">
+              {(["torso", "left_arm", "right_arm"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setAttachmentPoint(mode)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition capitalize ${
+                    attachmentPoint === mode
+                      ? "bg-cyan-500 border-cyan-500 text-black shadow-lg shadow-cyan-500/10"
+                      : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                  }`}
+                >
+                  {mode.replace("_", " ")}
+                </button>
+              ))}
+            </div>
           </section>
 
           {/* Core Settings / Perms */}
