@@ -74,7 +74,7 @@ export default function DeviceViewer() {
 
     // Connect to standard Socket.IO server
     const socket = io({
-      transports: ["websocket", "polling"],
+      transports: ["websocket"],
     });
     socketRef.current = socket;
 

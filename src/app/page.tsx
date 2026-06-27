@@ -123,11 +123,17 @@ export default function Home() {
   const [latency, setLatency] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [attachmentPoint, setAttachmentPoint] = useState<"torso" | "left_arm" | "right_arm">("torso");
+  const [invertRotation, setInvertRotation] = useState<boolean>(false);
   
   const attachmentPointRef = useRef<"torso" | "left_arm" | "right_arm">("torso");
   useEffect(() => {
     attachmentPointRef.current = attachmentPoint;
   }, [attachmentPoint]);
+
+  const invertRotationRef = useRef<boolean>(false);
+  useEffect(() => {
+    invertRotationRef.current = invertRotation;
+  }, [invertRotation]);
 
   // Telemetry state for UI
   const [accelerometer, setAccelerometer] = useState<StrictSensorValue>({ x: 0, y: 0, z: 0 });
@@ -188,7 +194,7 @@ export default function Home() {
     if (!deviceId) return;
 
     const socket = io({
-      transports: ["websocket", "polling"],
+      transports: ["websocket"],
     });
     socketRef.current = socket;
 
@@ -437,9 +443,9 @@ export default function Home() {
       const dMeanRot = Math.abs(features.meanRot - b.features.meanRot) / (b.features.meanRot + 0.1);
       const dFreq = Math.abs(features.freq - b.features.freq) / (b.features.freq + 0.1);
 
-      // Distance score (smaller is closer)
+      // Distance score (smaller is closer) - scaled down penalty (* 45) for higher matching tolerances
       const distance = dMeanAcc * 0.3 + dVarAcc * 0.3 + dMeanRot * 0.2 + dFreq * 0.2;
-      const similarity = Math.max(0, 100 - distance * 100);
+      const similarity = Math.max(0, 100 - distance * 45);
 
       if (similarity > maxSimilarity) {
         maxSimilarity = similarity;
@@ -447,9 +453,9 @@ export default function Home() {
       }
     }
 
-    // Apply lower boundary confidence threshold
+    // Apply lower boundary confidence threshold for mobile arm movements
     const confidence = Math.round(maxSimilarity);
-    if (confidence > 55) {
+    if (confidence > 45) {
       setDetectedActivity({ activity: bestMatchName, confidence });
     } else {
       setDetectedActivity({ activity: "unknown", confidence });
@@ -466,11 +472,12 @@ export default function Home() {
     let rLeg = 0;
 
     const attachment = attachmentPointRef.current;
+    const invert = invertRotationRef.current;
 
     if (attachment === "torso") {
       // Use device orientation gamma (roll) and beta (pitch) to drive basic body tilt and head look angle
       if (orient.gamma !== null) {
-        tilt = -orient.gamma; // tilt left/right
+        tilt = invert ? orient.gamma : -orient.gamma; // tilt left/right
       }
       if (orient.beta !== null) {
         // Limit pitch to natural head tilt range
@@ -480,15 +487,15 @@ export default function Home() {
       tilt = 0;
       head = 0;
       if (orient.beta !== null) {
-        // Map pitch beta to left arm rotation
-        lArm = orient.beta - 90;
+        // Default (non-inverted): 90 - beta. Inverted: beta - 90
+        lArm = invert ? (orient.beta - 90) : (90 - orient.beta);
       }
     } else if (attachment === "right_arm") {
       tilt = 0;
       head = 0;
       if (orient.beta !== null) {
-        // Map pitch beta to right arm rotation
-        rArm = 90 - orient.beta;
+        // Default (non-inverted): beta - 90. Inverted: 90 - beta
+        rArm = invert ? (90 - orient.beta) : (orient.beta - 90);
       }
     }
 
@@ -735,7 +742,7 @@ export default function Home() {
           {/* Phone Attachment Setup */}
           <section className="bg-slate-900/40 border border-white/5 rounded-2xl p-6 flex flex-col space-y-4">
             <div>
-              <h3 className="font-bold text-sm text-white font-sans">Phone Attachment Point</h3>
+              <h3 className="font-bold text-sm text-white font-sans">Phone Attachment Setup</h3>
               <p className="text-[11px] text-slate-400 mt-1">
                 Select where the phone is strapped to map the movements to the stickman accurately.
               </p>
@@ -755,6 +762,19 @@ export default function Home() {
                   {mode.replace("_", " ")}
                 </button>
               ))}
+            </div>
+
+            <div className="flex items-center space-x-2 pt-2 border-t border-white/5">
+              <input
+                type="checkbox"
+                id="invert-rot"
+                checked={invertRotation}
+                onChange={(e) => setInvertRotation(e.target.checked)}
+                className="w-4 h-4 rounded border-white/10 bg-slate-950 text-cyan-500 focus:ring-0 focus:ring-offset-0"
+              />
+              <label htmlFor="invert-rot" className="text-xs text-slate-300 font-medium select-none cursor-pointer">
+                Invert Sensor Direction (Calibrate if movements feel opposite)
+              </label>
             </div>
           </section>
 
