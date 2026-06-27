@@ -217,7 +217,8 @@ export default function Home() {
   useEffect(() => {
     if (!deviceId) return;
 
-    const socket = io({
+    const socket = io(typeof window !== "undefined" ? window.location.origin : "", {
+      path: "/socket.io",
       transports: ["websocket"],
       reconnectionAttempts: 15,
       reconnectionDelay: 1000,
