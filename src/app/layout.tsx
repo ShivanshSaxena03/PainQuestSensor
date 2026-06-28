@@ -10,9 +10,17 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Motion Sensor Pro",
-  description: "Live device motion sensor streaming",
+  title: "Motion Pro",
+  description: "Real-time Motion Recognition & 3D Stickman Visualizer PWA",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Motion Pro",
+  },
+  icons: {
+    apple: "/icon-192x192.png",
+  },
 };
 
 export default function RootLayout({

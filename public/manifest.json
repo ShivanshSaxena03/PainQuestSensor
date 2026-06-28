@@ -1,7 +1,7 @@
 {
-  "name": "Motion Sensor Pro",
+  "name": "Motion Pro",
   "short_name": "MotionPro",
-  "description": "Live device motion sensor streaming via WebSockets",
+  "description": "Real-time Motion Recognition & 3D Stickman Visualizer PWA",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
